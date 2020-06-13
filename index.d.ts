@@ -41,6 +41,7 @@ export type ResponseType =
     | 'stream'
 
 export interface AxiosRequestConfig {
+<<<<<<< HEAD
     url?: string;
     method?: Method;
     baseURL?: string;
@@ -77,6 +78,46 @@ export interface AxiosResponse<T = any> {
     headers: any;
     config: AxiosRequestConfig;
     request?: any;
+=======
+  url?: string;
+  method?: Method;
+  baseURL?: string;
+  transformRequest?: AxiosTransformer | AxiosTransformer[];
+  transformResponse?: AxiosTransformer | AxiosTransformer[];
+  headers?: any;
+  params?: any;
+  paramsSerializer?: (params: any) => string;
+  data?: any;
+  timeout?: number;
+  timeoutErrorMessage?: string;
+  withCredentials?: boolean;
+  adapter?: AxiosAdapter;
+  auth?: AxiosBasicCredentials;
+  responseType?: ResponseType;
+  xsrfCookieName?: string;
+  xsrfHeaderName?: string;
+  onUploadProgress?: (progressEvent: ProgressEvent) => void;
+  onDownloadProgress?: (progressEvent: ProgressEvent) => void;
+  maxContentLength?: number;
+  validateStatus?: ((status: number) => boolean | null);
+  maxBodyLength?: number;
+  maxRedirects?: number;
+  socketPath?: string | null;
+  httpAgent?: any;
+  httpsAgent?: any;
+  proxy?: AxiosProxyConfig | false;
+  cancelToken?: CancelToken;
+  decompress?: boolean;
+}
+
+export interface AxiosResponse<T = any>  {
+  data: T;
+  status: number;
+  statusText: string;
+  headers: any;
+  config: AxiosRequestConfig;
+  request?: any;
+>>>>>>> 36f0ad2f985c3289018f0fdaaddf309cc9458d9b
 }
 
 export interface AxiosError<T = any> extends Error {

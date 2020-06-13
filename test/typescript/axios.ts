@@ -11,6 +11,7 @@ import axios, {
 } from '../../';
 
 const config: AxiosRequestConfig = {
+<<<<<<< HEAD
     url: '/user',
     method: 'get',
     baseURL: 'https://api.example.com/',
@@ -42,6 +43,39 @@ const config: AxiosRequestConfig = {
         port: 9000
     },
     cancelToken: new axios.CancelToken((cancel: Canceler) => { })
+=======
+  url: '/user',
+  method: 'get',
+  baseURL: 'https://api.example.com/',
+  transformRequest: (data: any) => '{"foo":"bar"}',
+  transformResponse: [
+    (data: any) => ({ baz: 'qux' })
+  ],
+  headers: { 'X-FOO': 'bar' },
+  params: { id: 12345 },
+  paramsSerializer: (params: any) => 'id=12345',
+  data: { foo: 'bar' },
+  timeout: 10000,
+  withCredentials: true,
+  auth: {
+    username: 'janedoe',
+    password: 's00pers3cret'
+  },
+  responseType: 'json',
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
+  onUploadProgress: (progressEvent: ProgressEvent) => {},
+  onDownloadProgress: (progressEvent: ProgressEvent) => {},
+  maxContentLength: 2000,
+  maxBodyLength: 2000,
+  validateStatus: (status: number) => status >= 200 && status < 300,
+  maxRedirects: 5,
+  proxy: {
+    host: '127.0.0.1',
+    port: 9000
+  },
+  cancelToken: new axios.CancelToken((cancel: Canceler) => {})
+>>>>>>> 36f0ad2f985c3289018f0fdaaddf309cc9458d9b
 };
 
 const handleResponse = (response: AxiosResponse) => {
