@@ -18,7 +18,7 @@ module.exports = {
          * Style
          */
         // 强制使用一致的缩进
-        "indent": ["error", 4],
+        "indent": ["error", 2],
         // 强制在 function的左括号之前使用一致的空格
         "space-before-function-paren": "error",
         // 禁止在函数标识符和其调用之间有空格
