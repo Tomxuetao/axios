@@ -9,13 +9,13 @@
 <p align="center">
     <a href="https://axios-http.com/"><b>Website</b></a> •
     <a href="https://axios-http.com/docs/intro"><b>Documentation</b></a>
-</p> 
+</p>
 
 <div align="center">
 
 [![npm version](https://img.shields.io/npm/v/axios.svg?style=flat-square)](https://www.npmjs.org/package/axios)
 [![CDNJS](https://img.shields.io/cdnjs/v/axios.svg?style=flat-square)](https://cdnjs.com/libraries/axios)
-[![Build status](https://img.shields.io/github/workflow/status/axios/axios/ci?label=CI&logo=github&style=flat-square)](https://github.com/axios/axios/actions/workflows/ci.yml)
+[![Build status](https://img.shields.io/github/actions/workflow/status/axios/axios/ci.yml?branch=v1.x&label=CI&logo=github&style=flat-square)](https://github.com/axios/axios/actions/workflows/ci.yml)
 [![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-Ready--to--Code-blue?logo=gitpod&style=flat-square)](https://gitpod.io/#https://github.com/axios/axios)
 [![code coverage](https://img.shields.io/coveralls/mzabriskie/axios.svg?style=flat-square)](https://coveralls.io/r/mzabriskie/axios)
 [![install size](https://img.shields.io/badge/dynamic/json?url=https://packagephobia.com/v2/api.json?p=axios&query=$.install.pretty&label=install%20size&style=flat-square)](https://packagephobia.now.sh/result?p=axios)
@@ -29,7 +29,7 @@
 
 
 </div>
-  
+
 ## Table of Contents
 
   - [Features](#features)
@@ -81,7 +81,7 @@
 - Intercept request and response
 - Transform request and response data
 - Cancel requests
-- Automatic transforms for JSON data
+- Automatic transforms for [JSON](https://www.json.org/json-en.html) data
 - 🆕 Automatic data object serialization to `multipart/form-data` and `x-www-form-urlencoded` body encodings
 - Client side support for protecting against [XSRF](https://en.wikipedia.org/wiki/Cross-site_request_forgery)
 
@@ -492,6 +492,9 @@ These are the available config options for making requests. Only the `url` is re
   // Only either `socketPath` or `proxy` can be specified.
   // If both are specified, `socketPath` is used.
   socketPath: null, // default
+  
+  // `transport` determines the transport method that will be used to make the request. If defined, it will be used. Otherwise, if `maxRedirects` is 0, the default `http` or `https` library will be used, depending on the protocol specified in `protocol`. Otherwise, the `httpFollow` or `httpsFollow` library will be used, again depending on the protocol, which can handle redirects.
+  transport: undefined, // default
 
   // `httpAgent` and `httpsAgent` define a custom agent to be used when performing http
   // and https requests, respectively, in node.js. This allows options to be added like
@@ -763,6 +766,8 @@ Read [the interceptor tests](./test/specs/interceptors.spec.js) for seeing all t
 
 ## Handling Errors
 
+the default behavior is to reject every response that returns with a status code that falls out of the range of 2xx and treat it as an error.
+
 ```js
 axios.get('/user/12345')
   .catch(function (error) {
@@ -785,7 +790,7 @@ axios.get('/user/12345')
   });
 ```
 
-Using the `validateStatus` config option, you can define HTTP code(s) that should throw an error.
+Using the `validateStatus` config option, you can override the default condition (status >= 200 && status < 300) and define HTTP code(s) that should throw an error.
 
 ```js
 axios.get('/user/12345', {
@@ -1295,7 +1300,6 @@ You can use Gitpod, an online IDE(which is free for Open Source) for contributin
 ## Resources
 
 * [Changelog](https://github.com/axios/axios/blob/v1.x/CHANGELOG.md)
-* [Upgrade Guide](https://github.com/axios/axios/blob/v1.x/UPGRADE_GUIDE.md)
 * [Ecosystem](https://github.com/axios/axios/blob/v1.x/ECOSYSTEM.md)
 * [Contributing Guide](https://github.com/axios/axios/blob/v1.x/CONTRIBUTING.md)
 * [Code of Conduct](https://github.com/axios/axios/blob/v1.x/CODE_OF_CONDUCT.md)

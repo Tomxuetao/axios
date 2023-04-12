@@ -1,4 +1,4 @@
-// Axios v1.2.0-alpha.1 Copyright (c) 2022 Matt Zabriskie and contributors
+// Axios v1.3.5 Copyright (c) 2023 Matt Zabriskie and contributors
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
   typeof define === 'function' && define.amd ? define(factory) :
@@ -367,7 +367,11 @@
     }
     return null;
   }
-  var _global = typeof self === "undefined" ? typeof global === "undefined" ? undefined : global : self;
+  var _global = function () {
+    /*eslint no-undef:0*/
+    if (typeof globalThis !== "undefined") return globalThis;
+    return typeof self !== "undefined" ? self : typeof window !== 'undefined' ? window : global;
+  }();
   var isContextDefined = function isContextDefined(context) {
     return !isUndefined(context) && context !== _global;
   };
@@ -594,7 +598,7 @@
   /* Checking if the kindOfTest function returns true when passed an HTMLFormElement. */
   var isHTMLForm = kindOfTest('HTMLFormElement');
   var toCamelCase = function toCamelCase(str) {
-    return str.toLowerCase().replace(/[_-\s]([a-z\d])(\w*)/g, function replacer(m, p1, p2) {
+    return str.toLowerCase().replace(/[-_\s]([a-z\d])(\w*)/g, function replacer(m, p1, p2) {
       return p1.toUpperCase() + p2;
     });
   };
@@ -666,6 +670,56 @@
     value = +value;
     return Number.isFinite(value) ? value : defaultValue;
   };
+  var ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+  var DIGIT = '0123456789';
+  var ALPHABET = {
+    DIGIT: DIGIT,
+    ALPHA: ALPHA,
+    ALPHA_DIGIT: ALPHA + ALPHA.toUpperCase() + DIGIT
+  };
+  var generateString = function generateString() {
+    var size = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 16;
+    var alphabet = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : ALPHABET.ALPHA_DIGIT;
+    var str = '';
+    var length = alphabet.length;
+    while (size--) {
+      str += alphabet[Math.random() * length | 0];
+    }
+    return str;
+  };
+
+  /**
+   * If the thing is a FormData object, return true, otherwise return false.
+   *
+   * @param {unknown} thing - The thing to check.
+   *
+   * @returns {boolean}
+   */
+  function isSpecCompliantForm(thing) {
+    return !!(thing && isFunction(thing.append) && thing[Symbol.toStringTag] === 'FormData' && thing[Symbol.iterator]);
+  }
+  var toJSONObject = function toJSONObject(obj) {
+    var stack = new Array(10);
+    var visit = function visit(source, i) {
+      if (isObject(source)) {
+        if (stack.indexOf(source) >= 0) {
+          return;
+        }
+        if (!('toJSON' in source)) {
+          stack[i] = source;
+          var target = isArray(source) ? [] : {};
+          forEach(source, function (value, key) {
+            var reducedValue = visit(value, i + 1);
+            !isUndefined(reducedValue) && (target[key] = reducedValue);
+          });
+          stack[i] = undefined;
+          return target;
+        }
+      }
+      return source;
+    };
+    return visit(obj, 0);
+  };
   var utils = {
     isArray: isArray,
     isArrayBuffer: isArrayBuffer,
@@ -712,7 +766,11 @@
     toFiniteNumber: toFiniteNumber,
     findKey: findKey,
     global: _global,
-    isContextDefined: isContextDefined
+    isContextDefined: isContextDefined,
+    ALPHABET: ALPHABET,
+    generateString: generateString,
+    isSpecCompliantForm: isSpecCompliantForm,
+    toJSONObject: toJSONObject
   };
 
   /**
@@ -755,7 +813,7 @@
         columnNumber: this.columnNumber,
         stack: this.stack,
         // Axios
-        config: this.config,
+        config: utils.toJSONObject(this.config),
         code: this.code,
         status: this.response && this.response.status ? this.response.status : null
       };
@@ -790,9 +848,8 @@
     return axiosError;
   };
 
-  /* eslint-env browser */
-  var browser = (typeof self === "undefined" ? "undefined" : _typeof(self)) == 'object' ? self.FormData : window.FormData;
-  var FormData$2 = browser;
+  // eslint-disable-next-line strict
+  var httpAdapter = null;
 
   /**
    * Determines if the given thing is a array or js object.
@@ -849,17 +906,6 @@
   });
 
   /**
-   * If the thing is a FormData object, return true, otherwise return false.
-   *
-   * @param {unknown} thing - The thing to check.
-   *
-   * @returns {boolean}
-   */
-  function isSpecCompliant(thing) {
-    return thing && utils.isFunction(thing.append) && thing[Symbol.toStringTag] === 'FormData' && thing[Symbol.iterator];
-  }
-
-  /**
    * Convert a data object to FormData
    *
    * @param {Object} obj
@@ -888,7 +934,7 @@
     }
 
     // eslint-disable-next-line no-param-reassign
-    formData = formData || new (FormData$2 || FormData)();
+    formData = formData || new (FormData)();
 
     // eslint-disable-next-line no-param-reassign
     options = utils.toFlatObject(options, {
@@ -905,7 +951,7 @@
     var dots = options.dots;
     var indexes = options.indexes;
     var _Blob = options.Blob || typeof Blob !== 'undefined' && Blob;
-    var useBlob = _Blob && isSpecCompliant(formData);
+    var useBlob = _Blob && utils.isSpecCompliantForm(formData);
     if (!utils.isFunction(visitor)) {
       throw new TypeError('visitor must be a function');
     }
@@ -941,7 +987,7 @@
           key = metaTokens ? key : key.slice(0, -2);
           // eslint-disable-next-line no-param-reassign
           value = JSON.stringify(value);
-        } else if (utils.isArray(value) && isFlatArray(value) || utils.isFileList(value) || utils.endsWith(key, '[]') && (arr = utils.toArray(value))) {
+        } else if (utils.isArray(value) && isFlatArray(value) || (utils.isFileList(value) || utils.endsWith(key, '[]')) && (arr = utils.toArray(value))) {
           // eslint-disable-next-line no-param-reassign
           key = removeBrackets(key);
           arr.forEach(function each(el, index) {
@@ -1163,7 +1209,9 @@
 
   var URLSearchParams$1 = typeof URLSearchParams !== 'undefined' ? URLSearchParams : AxiosURLSearchParams;
 
-  var FormData$1 = FormData;
+  var FormData$1 = typeof FormData !== 'undefined' ? FormData : null;
+
+  var Blob$1 = typeof Blob !== 'undefined' ? Blob : null;
 
   /**
    * Determine if we're running in a standard browser environment
@@ -1189,14 +1237,30 @@
     }
     return typeof window !== 'undefined' && typeof document !== 'undefined';
   }();
+
+  /**
+   * Determine if we're running in a standard browser webWorker environment
+   *
+   * Although the `isStandardBrowserEnv` method indicates that
+   * `allows axios to run in a web worker`, the WebWorker will still be
+   * filtered out due to its judgment standard
+   * `typeof window !== 'undefined' && typeof document !== 'undefined'`.
+   * This leads to a problem when axios post `FormData` in webWorker
+   */
+  var isStandardBrowserWebWorkerEnv = function () {
+    return typeof WorkerGlobalScope !== 'undefined' &&
+    // eslint-disable-next-line no-undef
+    self instanceof WorkerGlobalScope && typeof self.importScripts === 'function';
+  }();
   var platform = {
     isBrowser: true,
     classes: {
       URLSearchParams: URLSearchParams$1,
       FormData: FormData$1,
-      Blob: Blob
+      Blob: Blob$1
     },
     isStandardBrowserEnv: isStandardBrowserEnv,
+    isStandardBrowserWebWorkerEnv: isStandardBrowserWebWorkerEnv,
     protocols: ['http', 'https', 'file', 'blob', 'url', 'data']
   };
 
@@ -1288,6 +1352,472 @@
     }
     return null;
   }
+
+  var DEFAULT_CONTENT_TYPE = {
+    'Content-Type': undefined
+  };
+
+  /**
+   * It takes a string, tries to parse it, and if it fails, it returns the stringified version
+   * of the input
+   *
+   * @param {any} rawValue - The value to be stringified.
+   * @param {Function} parser - A function that parses a string into a JavaScript object.
+   * @param {Function} encoder - A function that takes a value and returns a string.
+   *
+   * @returns {string} A stringified version of the rawValue.
+   */
+  function stringifySafely(rawValue, parser, encoder) {
+    if (utils.isString(rawValue)) {
+      try {
+        (parser || JSON.parse)(rawValue);
+        return utils.trim(rawValue);
+      } catch (e) {
+        if (e.name !== 'SyntaxError') {
+          throw e;
+        }
+      }
+    }
+    return (encoder || JSON.stringify)(rawValue);
+  }
+  var defaults = {
+    transitional: transitionalDefaults,
+    adapter: ['xhr', 'http'],
+    transformRequest: [function transformRequest(data, headers) {
+      var contentType = headers.getContentType() || '';
+      var hasJSONContentType = contentType.indexOf('application/json') > -1;
+      var isObjectPayload = utils.isObject(data);
+      if (isObjectPayload && utils.isHTMLForm(data)) {
+        data = new FormData(data);
+      }
+      var isFormData = utils.isFormData(data);
+      if (isFormData) {
+        if (!hasJSONContentType) {
+          return data;
+        }
+        return hasJSONContentType ? JSON.stringify(formDataToJSON(data)) : data;
+      }
+      if (utils.isArrayBuffer(data) || utils.isBuffer(data) || utils.isStream(data) || utils.isFile(data) || utils.isBlob(data)) {
+        return data;
+      }
+      if (utils.isArrayBufferView(data)) {
+        return data.buffer;
+      }
+      if (utils.isURLSearchParams(data)) {
+        headers.setContentType('application/x-www-form-urlencoded;charset=utf-8', false);
+        return data.toString();
+      }
+      var isFileList;
+      if (isObjectPayload) {
+        if (contentType.indexOf('application/x-www-form-urlencoded') > -1) {
+          return toURLEncodedForm(data, this.formSerializer).toString();
+        }
+        if ((isFileList = utils.isFileList(data)) || contentType.indexOf('multipart/form-data') > -1) {
+          var _FormData = this.env && this.env.FormData;
+          return toFormData(isFileList ? {
+            'files[]': data
+          } : data, _FormData && new _FormData(), this.formSerializer);
+        }
+      }
+      if (isObjectPayload || hasJSONContentType) {
+        headers.setContentType('application/json', false);
+        return stringifySafely(data);
+      }
+      return data;
+    }],
+    transformResponse: [function transformResponse(data) {
+      var transitional = this.transitional || defaults.transitional;
+      var forcedJSONParsing = transitional && transitional.forcedJSONParsing;
+      var JSONRequested = this.responseType === 'json';
+      if (data && utils.isString(data) && (forcedJSONParsing && !this.responseType || JSONRequested)) {
+        var silentJSONParsing = transitional && transitional.silentJSONParsing;
+        var strictJSONParsing = !silentJSONParsing && JSONRequested;
+        try {
+          return JSON.parse(data);
+        } catch (e) {
+          if (strictJSONParsing) {
+            if (e.name === 'SyntaxError') {
+              throw AxiosError.from(e, AxiosError.ERR_BAD_RESPONSE, this, null, this.response);
+            }
+            throw e;
+          }
+        }
+      }
+      return data;
+    }],
+    /**
+     * A timeout in milliseconds to abort a request. If set to 0 (default) a
+     * timeout is not created.
+     */
+    timeout: 0,
+    xsrfCookieName: 'XSRF-TOKEN',
+    xsrfHeaderName: 'X-XSRF-TOKEN',
+    maxContentLength: -1,
+    maxBodyLength: -1,
+    env: {
+      FormData: platform.classes.FormData,
+      Blob: platform.classes.Blob
+    },
+    validateStatus: function validateStatus(status) {
+      return status >= 200 && status < 300;
+    },
+    headers: {
+      common: {
+        'Accept': 'application/json, text/plain, */*'
+      }
+    }
+  };
+  utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
+    defaults.headers[method] = {};
+  });
+  utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
+    defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
+  });
+  var defaults$1 = defaults;
+
+  // RawAxiosHeaders whose duplicates are ignored by node
+  // c.f. https://nodejs.org/api/http.html#http_message_headers
+  var ignoreDuplicateOf = utils.toObjectSet(['age', 'authorization', 'content-length', 'content-type', 'etag', 'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since', 'last-modified', 'location', 'max-forwards', 'proxy-authorization', 'referer', 'retry-after', 'user-agent']);
+
+  /**
+   * Parse headers into an object
+   *
+   * ```
+   * Date: Wed, 27 Aug 2014 08:58:49 GMT
+   * Content-Type: application/json
+   * Connection: keep-alive
+   * Transfer-Encoding: chunked
+   * ```
+   *
+   * @param {String} rawHeaders Headers needing to be parsed
+   *
+   * @returns {Object} Headers parsed into an object
+   */
+  var parseHeaders = (function (rawHeaders) {
+    var parsed = {};
+    var key;
+    var val;
+    var i;
+    rawHeaders && rawHeaders.split('\n').forEach(function parser(line) {
+      i = line.indexOf(':');
+      key = line.substring(0, i).trim().toLowerCase();
+      val = line.substring(i + 1).trim();
+      if (!key || parsed[key] && ignoreDuplicateOf[key]) {
+        return;
+      }
+      if (key === 'set-cookie') {
+        if (parsed[key]) {
+          parsed[key].push(val);
+        } else {
+          parsed[key] = [val];
+        }
+      } else {
+        parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
+      }
+    });
+    return parsed;
+  });
+
+  var $internals = Symbol('internals');
+  function normalizeHeader(header) {
+    return header && String(header).trim().toLowerCase();
+  }
+  function normalizeValue(value) {
+    if (value === false || value == null) {
+      return value;
+    }
+    return utils.isArray(value) ? value.map(normalizeValue) : String(value);
+  }
+  function parseTokens(str) {
+    var tokens = Object.create(null);
+    var tokensRE = /([^\s,;=]+)\s*(?:=\s*([^,;]+))?/g;
+    var match;
+    while (match = tokensRE.exec(str)) {
+      tokens[match[1]] = match[2];
+    }
+    return tokens;
+  }
+  var isValidHeaderName = function isValidHeaderName(str) {
+    return /^[-_a-zA-Z0-9^`|~,!#$%&'*+.]+$/.test(str.trim());
+  };
+  function matchHeaderValue(context, value, header, filter, isHeaderNameFilter) {
+    if (utils.isFunction(filter)) {
+      return filter.call(this, value, header);
+    }
+    if (isHeaderNameFilter) {
+      value = header;
+    }
+    if (!utils.isString(value)) return;
+    if (utils.isString(filter)) {
+      return value.indexOf(filter) !== -1;
+    }
+    if (utils.isRegExp(filter)) {
+      return filter.test(value);
+    }
+  }
+  function formatHeader(header) {
+    return header.trim().toLowerCase().replace(/([a-z\d])(\w*)/g, function (w, _char, str) {
+      return _char.toUpperCase() + str;
+    });
+  }
+  function buildAccessors(obj, header) {
+    var accessorName = utils.toCamelCase(' ' + header);
+    ['get', 'set', 'has'].forEach(function (methodName) {
+      Object.defineProperty(obj, methodName + accessorName, {
+        value: function value(arg1, arg2, arg3) {
+          return this[methodName].call(this, header, arg1, arg2, arg3);
+        },
+        configurable: true
+      });
+    });
+  }
+  var AxiosHeaders = /*#__PURE__*/function (_Symbol$iterator, _Symbol$toStringTag) {
+    function AxiosHeaders(headers) {
+      _classCallCheck(this, AxiosHeaders);
+      headers && this.set(headers);
+    }
+    _createClass(AxiosHeaders, [{
+      key: "set",
+      value: function set(header, valueOrRewrite, rewrite) {
+        var self = this;
+        function setHeader(_value, _header, _rewrite) {
+          var lHeader = normalizeHeader(_header);
+          if (!lHeader) {
+            throw new Error('header name must be a non-empty string');
+          }
+          var key = utils.findKey(self, lHeader);
+          if (!key || self[key] === undefined || _rewrite === true || _rewrite === undefined && self[key] !== false) {
+            self[key || _header] = normalizeValue(_value);
+          }
+        }
+        var setHeaders = function setHeaders(headers, _rewrite) {
+          return utils.forEach(headers, function (_value, _header) {
+            return setHeader(_value, _header, _rewrite);
+          });
+        };
+        if (utils.isPlainObject(header) || header instanceof this.constructor) {
+          setHeaders(header, valueOrRewrite);
+        } else if (utils.isString(header) && (header = header.trim()) && !isValidHeaderName(header)) {
+          setHeaders(parseHeaders(header), valueOrRewrite);
+        } else {
+          header != null && setHeader(valueOrRewrite, header, rewrite);
+        }
+        return this;
+      }
+    }, {
+      key: "get",
+      value: function get(header, parser) {
+        header = normalizeHeader(header);
+        if (header) {
+          var key = utils.findKey(this, header);
+          if (key) {
+            var value = this[key];
+            if (!parser) {
+              return value;
+            }
+            if (parser === true) {
+              return parseTokens(value);
+            }
+            if (utils.isFunction(parser)) {
+              return parser.call(this, value, key);
+            }
+            if (utils.isRegExp(parser)) {
+              return parser.exec(value);
+            }
+            throw new TypeError('parser must be boolean|regexp|function');
+          }
+        }
+      }
+    }, {
+      key: "has",
+      value: function has(header, matcher) {
+        header = normalizeHeader(header);
+        if (header) {
+          var key = utils.findKey(this, header);
+          return !!(key && this[key] !== undefined && (!matcher || matchHeaderValue(this, this[key], key, matcher)));
+        }
+        return false;
+      }
+    }, {
+      key: "delete",
+      value: function _delete(header, matcher) {
+        var self = this;
+        var deleted = false;
+        function deleteHeader(_header) {
+          _header = normalizeHeader(_header);
+          if (_header) {
+            var key = utils.findKey(self, _header);
+            if (key && (!matcher || matchHeaderValue(self, self[key], key, matcher))) {
+              delete self[key];
+              deleted = true;
+            }
+          }
+        }
+        if (utils.isArray(header)) {
+          header.forEach(deleteHeader);
+        } else {
+          deleteHeader(header);
+        }
+        return deleted;
+      }
+    }, {
+      key: "clear",
+      value: function clear(matcher) {
+        var keys = Object.keys(this);
+        var i = keys.length;
+        var deleted = false;
+        while (i--) {
+          var key = keys[i];
+          if (!matcher || matchHeaderValue(this, this[key], key, matcher, true)) {
+            delete this[key];
+            deleted = true;
+          }
+        }
+        return deleted;
+      }
+    }, {
+      key: "normalize",
+      value: function normalize(format) {
+        var self = this;
+        var headers = {};
+        utils.forEach(this, function (value, header) {
+          var key = utils.findKey(headers, header);
+          if (key) {
+            self[key] = normalizeValue(value);
+            delete self[header];
+            return;
+          }
+          var normalized = format ? formatHeader(header) : String(header).trim();
+          if (normalized !== header) {
+            delete self[header];
+          }
+          self[normalized] = normalizeValue(value);
+          headers[normalized] = true;
+        });
+        return this;
+      }
+    }, {
+      key: "concat",
+      value: function concat() {
+        var _this$constructor;
+        for (var _len = arguments.length, targets = new Array(_len), _key = 0; _key < _len; _key++) {
+          targets[_key] = arguments[_key];
+        }
+        return (_this$constructor = this.constructor).concat.apply(_this$constructor, [this].concat(targets));
+      }
+    }, {
+      key: "toJSON",
+      value: function toJSON(asStrings) {
+        var obj = Object.create(null);
+        utils.forEach(this, function (value, header) {
+          value != null && value !== false && (obj[header] = asStrings && utils.isArray(value) ? value.join(', ') : value);
+        });
+        return obj;
+      }
+    }, {
+      key: _Symbol$iterator,
+      value: function value() {
+        return Object.entries(this.toJSON())[Symbol.iterator]();
+      }
+    }, {
+      key: "toString",
+      value: function toString() {
+        return Object.entries(this.toJSON()).map(function (_ref) {
+          var _ref2 = _slicedToArray(_ref, 2),
+            header = _ref2[0],
+            value = _ref2[1];
+          return header + ': ' + value;
+        }).join('\n');
+      }
+    }, {
+      key: _Symbol$toStringTag,
+      get: function get() {
+        return 'AxiosHeaders';
+      }
+    }], [{
+      key: "from",
+      value: function from(thing) {
+        return thing instanceof this ? thing : new this(thing);
+      }
+    }, {
+      key: "concat",
+      value: function concat(first) {
+        var computed = new this(first);
+        for (var _len2 = arguments.length, targets = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+          targets[_key2 - 1] = arguments[_key2];
+        }
+        targets.forEach(function (target) {
+          return computed.set(target);
+        });
+        return computed;
+      }
+    }, {
+      key: "accessor",
+      value: function accessor(header) {
+        var internals = this[$internals] = this[$internals] = {
+          accessors: {}
+        };
+        var accessors = internals.accessors;
+        var prototype = this.prototype;
+        function defineAccessor(_header) {
+          var lHeader = normalizeHeader(_header);
+          if (!accessors[lHeader]) {
+            buildAccessors(prototype, _header);
+            accessors[lHeader] = true;
+          }
+        }
+        utils.isArray(header) ? header.forEach(defineAccessor) : defineAccessor(header);
+        return this;
+      }
+    }]);
+    return AxiosHeaders;
+  }(Symbol.iterator, Symbol.toStringTag);
+  AxiosHeaders.accessor(['Content-Type', 'Content-Length', 'Accept', 'Accept-Encoding', 'User-Agent', 'Authorization']);
+  utils.freezeMethods(AxiosHeaders.prototype);
+  utils.freezeMethods(AxiosHeaders);
+  var AxiosHeaders$1 = AxiosHeaders;
+
+  /**
+   * Transform the data for a request or a response
+   *
+   * @param {Array|Function} fns A single function or Array of functions
+   * @param {?Object} response The response object
+   *
+   * @returns {*} The resulting transformed data
+   */
+  function transformData(fns, response) {
+    var config = this || defaults$1;
+    var context = response || config;
+    var headers = AxiosHeaders$1.from(context.headers);
+    var data = context.data;
+    utils.forEach(fns, function transform(fn) {
+      data = fn.call(config, data, headers.normalize(), response ? response.status : undefined);
+    });
+    headers.normalize();
+    return data;
+  }
+
+  function isCancel(value) {
+    return !!(value && value.__CANCEL__);
+  }
+
+  /**
+   * A `CanceledError` is an object that is thrown when an operation is canceled.
+   *
+   * @param {string=} message The message.
+   * @param {Object=} config The config.
+   * @param {Object=} request The request.
+   *
+   * @returns {CanceledError} The created error.
+   */
+  function CanceledError(message, config, request) {
+    // eslint-disable-next-line no-eq-null,eqeqeq
+    AxiosError.call(this, message == null ? 'canceled' : message, AxiosError.ERR_CANCELED, config, request);
+    this.name = 'CanceledError';
+  }
+  utils.inherits(CanceledError, AxiosError, {
+    __CANCEL__: true
+  });
 
   /**
    * Resolve or reject a Promise based on response status.
@@ -1446,317 +1976,10 @@
     };
   }();
 
-  /**
-   * A `CanceledError` is an object that is thrown when an operation is canceled.
-   *
-   * @param {string=} message The message.
-   * @param {Object=} config The config.
-   * @param {Object=} request The request.
-   *
-   * @returns {CanceledError} The created error.
-   */
-  function CanceledError(message, config, request) {
-    // eslint-disable-next-line no-eq-null,eqeqeq
-    AxiosError.call(this, message == null ? 'canceled' : message, AxiosError.ERR_CANCELED, config, request);
-    this.name = 'CanceledError';
-  }
-  utils.inherits(CanceledError, AxiosError, {
-    __CANCEL__: true
-  });
-
   function parseProtocol(url) {
     var match = /^([-+\w]{1,25})(:?\/\/|:)/.exec(url);
     return match && match[1] || '';
   }
-
-  // RawAxiosHeaders whose duplicates are ignored by node
-  // c.f. https://nodejs.org/api/http.html#http_message_headers
-  var ignoreDuplicateOf = utils.toObjectSet(['age', 'authorization', 'content-length', 'content-type', 'etag', 'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since', 'last-modified', 'location', 'max-forwards', 'proxy-authorization', 'referer', 'retry-after', 'user-agent']);
-
-  /**
-   * Parse headers into an object
-   *
-   * ```
-   * Date: Wed, 27 Aug 2014 08:58:49 GMT
-   * Content-Type: application/json
-   * Connection: keep-alive
-   * Transfer-Encoding: chunked
-   * ```
-   *
-   * @param {String} rawHeaders Headers needing to be parsed
-   *
-   * @returns {Object} Headers parsed into an object
-   */
-  var parseHeaders = (function (rawHeaders) {
-    var parsed = {};
-    var key;
-    var val;
-    var i;
-    rawHeaders && rawHeaders.split('\n').forEach(function parser(line) {
-      i = line.indexOf(':');
-      key = line.substring(0, i).trim().toLowerCase();
-      val = line.substring(i + 1).trim();
-      if (!key || parsed[key] && ignoreDuplicateOf[key]) {
-        return;
-      }
-      if (key === 'set-cookie') {
-        if (parsed[key]) {
-          parsed[key].push(val);
-        } else {
-          parsed[key] = [val];
-        }
-      } else {
-        parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
-      }
-    });
-    return parsed;
-  });
-
-  var $internals = Symbol('internals');
-  function normalizeHeader(header) {
-    return header && String(header).trim().toLowerCase();
-  }
-  function normalizeValue(value) {
-    if (value === false || value == null) {
-      return value;
-    }
-    return utils.isArray(value) ? value.map(normalizeValue) : String(value);
-  }
-  function parseTokens(str) {
-    var tokens = Object.create(null);
-    var tokensRE = /([^\s,;=]+)\s*(?:=\s*([^,;]+))?/g;
-    var match;
-    while (match = tokensRE.exec(str)) {
-      tokens[match[1]] = match[2];
-    }
-    return tokens;
-  }
-  function isValidHeaderName(str) {
-    return /^[-_a-zA-Z]+$/.test(str.trim());
-  }
-  function matchHeaderValue(context, value, header, filter) {
-    if (utils.isFunction(filter)) {
-      return filter.call(this, value, header);
-    }
-    if (!utils.isString(value)) return;
-    if (utils.isString(filter)) {
-      return value.indexOf(filter) !== -1;
-    }
-    if (utils.isRegExp(filter)) {
-      return filter.test(value);
-    }
-  }
-  function formatHeader(header) {
-    return header.trim().toLowerCase().replace(/([a-z\d])(\w*)/g, function (w, _char, str) {
-      return _char.toUpperCase() + str;
-    });
-  }
-  function buildAccessors(obj, header) {
-    var accessorName = utils.toCamelCase(' ' + header);
-    ['get', 'set', 'has'].forEach(function (methodName) {
-      Object.defineProperty(obj, methodName + accessorName, {
-        value: function value(arg1, arg2, arg3) {
-          return this[methodName].call(this, header, arg1, arg2, arg3);
-        },
-        configurable: true
-      });
-    });
-  }
-  var AxiosHeaders = /*#__PURE__*/function (_Symbol$iterator, _Symbol$toStringTag) {
-    function AxiosHeaders(headers) {
-      _classCallCheck(this, AxiosHeaders);
-      headers && this.set(headers);
-    }
-    _createClass(AxiosHeaders, [{
-      key: "set",
-      value: function set(header, valueOrRewrite, rewrite) {
-        var self = this;
-        function setHeader(_value, _header, _rewrite) {
-          var lHeader = normalizeHeader(_header);
-          if (!lHeader) {
-            throw new Error('header name must be a non-empty string');
-          }
-          var key = utils.findKey(self, lHeader);
-          if (!key || self[key] === undefined || _rewrite === true || _rewrite === undefined && self[key] !== false) {
-            self[key || _header] = normalizeValue(_value);
-          }
-        }
-        var setHeaders = function setHeaders(headers, _rewrite) {
-          return utils.forEach(headers, function (_value, _header) {
-            return setHeader(_value, _header, _rewrite);
-          });
-        };
-        if (utils.isPlainObject(header) || header instanceof this.constructor) {
-          setHeaders(header, valueOrRewrite);
-        } else if (utils.isString(header) && (header = header.trim()) && !isValidHeaderName(header)) {
-          setHeaders(parseHeaders(header), valueOrRewrite);
-        } else {
-          header != null && setHeader(valueOrRewrite, header, rewrite);
-        }
-        return this;
-      }
-    }, {
-      key: "get",
-      value: function get(header, parser) {
-        header = normalizeHeader(header);
-        if (header) {
-          var key = utils.findKey(this, header);
-          if (key) {
-            var value = this[key];
-            if (!parser) {
-              return value;
-            }
-            if (parser === true) {
-              return parseTokens(value);
-            }
-            if (utils.isFunction(parser)) {
-              return parser.call(this, value, key);
-            }
-            if (utils.isRegExp(parser)) {
-              return parser.exec(value);
-            }
-            throw new TypeError('parser must be boolean|regexp|function');
-          }
-        }
-      }
-    }, {
-      key: "has",
-      value: function has(header, matcher) {
-        header = normalizeHeader(header);
-        if (header) {
-          var key = utils.findKey(this, header);
-          return !!(key && (!matcher || matchHeaderValue(this, this[key], key, matcher)));
-        }
-        return false;
-      }
-    }, {
-      key: "delete",
-      value: function _delete(header, matcher) {
-        var self = this;
-        var deleted = false;
-        function deleteHeader(_header) {
-          _header = normalizeHeader(_header);
-          if (_header) {
-            var key = utils.findKey(self, _header);
-            if (key && (!matcher || matchHeaderValue(self, self[key], key, matcher))) {
-              delete self[key];
-              deleted = true;
-            }
-          }
-        }
-        if (utils.isArray(header)) {
-          header.forEach(deleteHeader);
-        } else {
-          deleteHeader(header);
-        }
-        return deleted;
-      }
-    }, {
-      key: "clear",
-      value: function clear() {
-        return Object.keys(this).forEach(this["delete"].bind(this));
-      }
-    }, {
-      key: "normalize",
-      value: function normalize(format) {
-        var self = this;
-        var headers = {};
-        utils.forEach(this, function (value, header) {
-          var key = utils.findKey(headers, header);
-          if (key) {
-            self[key] = normalizeValue(value);
-            delete self[header];
-            return;
-          }
-          var normalized = format ? formatHeader(header) : String(header).trim();
-          if (normalized !== header) {
-            delete self[header];
-          }
-          self[normalized] = normalizeValue(value);
-          headers[normalized] = true;
-        });
-        return this;
-      }
-    }, {
-      key: "concat",
-      value: function concat() {
-        var _this$constructor;
-        for (var _len = arguments.length, targets = new Array(_len), _key = 0; _key < _len; _key++) {
-          targets[_key] = arguments[_key];
-        }
-        return (_this$constructor = this.constructor).concat.apply(_this$constructor, [this].concat(targets));
-      }
-    }, {
-      key: "toJSON",
-      value: function toJSON(asStrings) {
-        var obj = Object.create(null);
-        utils.forEach(this, function (value, header) {
-          value != null && value !== false && (obj[header] = asStrings && utils.isArray(value) ? value.join(', ') : value);
-        });
-        return obj;
-      }
-    }, {
-      key: _Symbol$iterator,
-      value: function value() {
-        return Object.entries(this.toJSON())[Symbol.iterator]();
-      }
-    }, {
-      key: "toString",
-      value: function toString() {
-        return Object.entries(this.toJSON()).map(function (_ref) {
-          var _ref2 = _slicedToArray(_ref, 2),
-            header = _ref2[0],
-            value = _ref2[1];
-          return header + ': ' + value;
-        }).join('\n');
-      }
-    }, {
-      key: _Symbol$toStringTag,
-      get: function get() {
-        return 'AxiosHeaders';
-      }
-    }], [{
-      key: "from",
-      value: function from(thing) {
-        return thing instanceof this ? thing : new this(thing);
-      }
-    }, {
-      key: "concat",
-      value: function concat(first) {
-        var computed = new this(first);
-        for (var _len2 = arguments.length, targets = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
-          targets[_key2 - 1] = arguments[_key2];
-        }
-        targets.forEach(function (target) {
-          return computed.set(target);
-        });
-        return computed;
-      }
-    }, {
-      key: "accessor",
-      value: function accessor(header) {
-        var internals = this[$internals] = this[$internals] = {
-          accessors: {}
-        };
-        var accessors = internals.accessors;
-        var prototype = this.prototype;
-        function defineAccessor(_header) {
-          var lHeader = normalizeHeader(_header);
-          if (!accessors[lHeader]) {
-            buildAccessors(prototype, _header);
-            accessors[lHeader] = true;
-          }
-        }
-        utils.isArray(header) ? header.forEach(defineAccessor) : defineAccessor(header);
-        return this;
-      }
-    }]);
-    return AxiosHeaders;
-  }(Symbol.iterator, Symbol.toStringTag);
-  AxiosHeaders.accessor(['Content-Type', 'Content-Length', 'Accept', 'Accept-Encoding', 'User-Agent']);
-  utils.freezeMethods(AxiosHeaders.prototype);
-  utils.freezeMethods(AxiosHeaders);
-  var AxiosHeaders$1 = AxiosHeaders;
 
   /**
    * Calculate data maxRate
@@ -1821,7 +2044,8 @@
       listener(data);
     };
   }
-  function xhrAdapter(config) {
+  var isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
+  var xhrAdapter = isXHRAdapterSupported && function (config) {
     return new Promise(function dispatchXhrRequest(resolve, reject) {
       var requestData = config.data;
       var requestHeaders = AxiosHeaders$1.from(config.headers).normalize();
@@ -1835,7 +2059,7 @@
           config.signal.removeEventListener('abort', onCanceled);
         }
       }
-      if (utils.isFormData(requestData) && platform.isStandardBrowserEnv) {
+      if (utils.isFormData(requestData) && (platform.isStandardBrowserEnv || platform.isStandardBrowserWebWorkerEnv)) {
         requestHeaders.setContentType(false); // Let the browser set it
       }
 
@@ -2000,192 +2224,52 @@
       // Send the request
       request.send(requestData || null);
     });
-  }
+  };
 
-  var adapters = {
-    http: xhrAdapter,
+  var knownAdapters = {
+    http: httpAdapter,
     xhr: xhrAdapter
   };
-  var adapters$1 = {
-    getAdapter: function getAdapter(nameOrAdapter) {
-      if (utils.isString(nameOrAdapter)) {
-        var adapter = adapters[nameOrAdapter];
-        if (!nameOrAdapter) {
-          throw Error(utils.hasOwnProp(nameOrAdapter) ? "Adapter '".concat(nameOrAdapter, "' is not available in the build") : "Can not resolve adapter '".concat(nameOrAdapter, "'"));
-        }
-        return adapter;
+  utils.forEach(knownAdapters, function (fn, value) {
+    if (fn) {
+      try {
+        Object.defineProperty(fn, 'name', {
+          value: value
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-empty
       }
-      if (!utils.isFunction(nameOrAdapter)) {
+      Object.defineProperty(fn, 'adapterName', {
+        value: value
+      });
+    }
+  });
+  var adapters = {
+    getAdapter: function getAdapter(adapters) {
+      adapters = utils.isArray(adapters) ? adapters : [adapters];
+      var _adapters = adapters,
+        length = _adapters.length;
+      var nameOrAdapter;
+      var adapter;
+      for (var i = 0; i < length; i++) {
+        nameOrAdapter = adapters[i];
+        if (adapter = utils.isString(nameOrAdapter) ? knownAdapters[nameOrAdapter.toLowerCase()] : nameOrAdapter) {
+          break;
+        }
+      }
+      if (!adapter) {
+        if (adapter === false) {
+          throw new AxiosError("Adapter ".concat(nameOrAdapter, " is not supported by the environment"), 'ERR_NOT_SUPPORT');
+        }
+        throw new Error(utils.hasOwnProp(knownAdapters, nameOrAdapter) ? "Adapter '".concat(nameOrAdapter, "' is not available in the build") : "Unknown adapter '".concat(nameOrAdapter, "'"));
+      }
+      if (!utils.isFunction(adapter)) {
         throw new TypeError('adapter is not a function');
       }
-      return nameOrAdapter;
+      return adapter;
     },
-    adapters: adapters
+    adapters: knownAdapters
   };
-
-  var DEFAULT_CONTENT_TYPE = {
-    'Content-Type': undefined
-  };
-
-  /**
-   * If the browser has an XMLHttpRequest object, use the XHR adapter, otherwise use the HTTP
-   * adapter
-   *
-   * @returns {Function}
-   */
-  function getDefaultAdapter() {
-    var adapter;
-    if (typeof XMLHttpRequest !== 'undefined') {
-      // For browsers use XHR adapter
-      adapter = adapters$1.getAdapter('xhr');
-    } else if (typeof process !== 'undefined' && utils.kindOf(process) === 'process') {
-      // For node use HTTP adapter
-      adapter = adapters$1.getAdapter('http');
-    }
-    return adapter;
-  }
-
-  /**
-   * It takes a string, tries to parse it, and if it fails, it returns the stringified version
-   * of the input
-   *
-   * @param {any} rawValue - The value to be stringified.
-   * @param {Function} parser - A function that parses a string into a JavaScript object.
-   * @param {Function} encoder - A function that takes a value and returns a string.
-   *
-   * @returns {string} A stringified version of the rawValue.
-   */
-  function stringifySafely(rawValue, parser, encoder) {
-    if (utils.isString(rawValue)) {
-      try {
-        (parser || JSON.parse)(rawValue);
-        return utils.trim(rawValue);
-      } catch (e) {
-        if (e.name !== 'SyntaxError') {
-          throw e;
-        }
-      }
-    }
-    return (encoder || JSON.stringify)(rawValue);
-  }
-  var defaults = {
-    transitional: transitionalDefaults,
-    adapter: getDefaultAdapter(),
-    transformRequest: [function transformRequest(data, headers) {
-      var contentType = headers.getContentType() || '';
-      var hasJSONContentType = contentType.indexOf('application/json') > -1;
-      var isObjectPayload = utils.isObject(data);
-      if (isObjectPayload && utils.isHTMLForm(data)) {
-        data = new FormData(data);
-      }
-      var isFormData = utils.isFormData(data);
-      if (isFormData) {
-        if (!hasJSONContentType) {
-          return data;
-        }
-        return hasJSONContentType ? JSON.stringify(formDataToJSON(data)) : data;
-      }
-      if (utils.isArrayBuffer(data) || utils.isBuffer(data) || utils.isStream(data) || utils.isFile(data) || utils.isBlob(data)) {
-        return data;
-      }
-      if (utils.isArrayBufferView(data)) {
-        return data.buffer;
-      }
-      if (utils.isURLSearchParams(data)) {
-        headers.setContentType('application/x-www-form-urlencoded;charset=utf-8', false);
-        return data.toString();
-      }
-      var isFileList;
-      if (isObjectPayload) {
-        if (contentType.indexOf('application/x-www-form-urlencoded') > -1) {
-          return toURLEncodedForm(data, this.formSerializer).toString();
-        }
-        if ((isFileList = utils.isFileList(data)) || contentType.indexOf('multipart/form-data') > -1) {
-          var _FormData = this.env && this.env.FormData;
-          return toFormData(isFileList ? {
-            'files[]': data
-          } : data, _FormData && new _FormData(), this.formSerializer);
-        }
-      }
-      if (isObjectPayload || hasJSONContentType) {
-        headers.setContentType('application/json', false);
-        return stringifySafely(data);
-      }
-      return data;
-    }],
-    transformResponse: [function transformResponse(data) {
-      var transitional = this.transitional || defaults.transitional;
-      var forcedJSONParsing = transitional && transitional.forcedJSONParsing;
-      var JSONRequested = this.responseType === 'json';
-      if (data && utils.isString(data) && (forcedJSONParsing && !this.responseType || JSONRequested)) {
-        var silentJSONParsing = transitional && transitional.silentJSONParsing;
-        var strictJSONParsing = !silentJSONParsing && JSONRequested;
-        try {
-          return JSON.parse(data);
-        } catch (e) {
-          if (strictJSONParsing) {
-            if (e.name === 'SyntaxError') {
-              throw AxiosError.from(e, AxiosError.ERR_BAD_RESPONSE, this, null, this.response);
-            }
-            throw e;
-          }
-        }
-      }
-      return data;
-    }],
-    /**
-     * A timeout in milliseconds to abort a request. If set to 0 (default) a
-     * timeout is not created.
-     */
-    timeout: 0,
-    xsrfCookieName: 'XSRF-TOKEN',
-    xsrfHeaderName: 'X-XSRF-TOKEN',
-    maxContentLength: -1,
-    maxBodyLength: -1,
-    env: {
-      FormData: platform.classes.FormData,
-      Blob: platform.classes.Blob
-    },
-    validateStatus: function validateStatus(status) {
-      return status >= 200 && status < 300;
-    },
-    headers: {
-      common: {
-        'Accept': 'application/json, text/plain, */*'
-      }
-    }
-  };
-  utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
-    defaults.headers[method] = {};
-  });
-  utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
-    defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
-  });
-  var defaults$1 = defaults;
-
-  /**
-   * Transform the data for a request or a response
-   *
-   * @param {Array|Function} fns A single function or Array of functions
-   * @param {?Object} response The response object
-   *
-   * @returns {*} The resulting transformed data
-   */
-  function transformData(fns, response) {
-    var config = this || defaults$1;
-    var context = response || config;
-    var headers = AxiosHeaders$1.from(context.headers);
-    var data = context.data;
-    utils.forEach(fns, function transform(fn) {
-      data = fn.call(config, data, headers.normalize(), response ? response.status : undefined);
-    });
-    headers.normalize();
-    return data;
-  }
-
-  function isCancel(value) {
-    return !!(value && value.__CANCEL__);
-  }
 
   /**
    * Throws a `CanceledError` if cancellation has been requested.
@@ -2199,7 +2283,7 @@
       config.cancelToken.throwIfRequested();
     }
     if (config.signal && config.signal.aborted) {
-      throw new CanceledError();
+      throw new CanceledError(null, config);
     }
   }
 
@@ -2219,7 +2303,7 @@
     if (['post', 'put', 'patch'].indexOf(config.method) !== -1) {
       config.headers.setContentType('application/x-www-form-urlencoded', false);
     }
-    var adapter = config.adapter || defaults$1.adapter;
+    var adapter = adapters.getAdapter(config.adapter || defaults$1.adapter);
     return adapter(config).then(function onAdapterResolution(response) {
       throwIfCancellationRequested(config);
 
@@ -2344,7 +2428,7 @@
     return config;
   }
 
-  var VERSION = "1.2.0-alpha.1";
+  var VERSION = "1.3.5";
 
   var validators$1 = {};
 
@@ -2471,11 +2555,17 @@
             clarifyTimeoutError: validators.transitional(validators["boolean"])
           }, false);
         }
-        if (paramsSerializer !== undefined) {
-          validator.assertOptions(paramsSerializer, {
-            encode: validators["function"],
-            serialize: validators["function"]
-          }, true);
+        if (paramsSerializer != null) {
+          if (utils.isFunction(paramsSerializer)) {
+            config.paramsSerializer = {
+              serialize: paramsSerializer
+            };
+          } else {
+            validator.assertOptions(paramsSerializer, {
+              encode: validators["function"],
+              serialize: validators["function"]
+            }, true);
+          }
         }
 
         // Set config.method
@@ -2736,6 +2826,79 @@
     return utils.isObject(payload) && payload.isAxiosError === true;
   }
 
+  var HttpStatusCode = {
+    Continue: 100,
+    SwitchingProtocols: 101,
+    Processing: 102,
+    EarlyHints: 103,
+    Ok: 200,
+    Created: 201,
+    Accepted: 202,
+    NonAuthoritativeInformation: 203,
+    NoContent: 204,
+    ResetContent: 205,
+    PartialContent: 206,
+    MultiStatus: 207,
+    AlreadyReported: 208,
+    ImUsed: 226,
+    MultipleChoices: 300,
+    MovedPermanently: 301,
+    Found: 302,
+    SeeOther: 303,
+    NotModified: 304,
+    UseProxy: 305,
+    Unused: 306,
+    TemporaryRedirect: 307,
+    PermanentRedirect: 308,
+    BadRequest: 400,
+    Unauthorized: 401,
+    PaymentRequired: 402,
+    Forbidden: 403,
+    NotFound: 404,
+    MethodNotAllowed: 405,
+    NotAcceptable: 406,
+    ProxyAuthenticationRequired: 407,
+    RequestTimeout: 408,
+    Conflict: 409,
+    Gone: 410,
+    LengthRequired: 411,
+    PreconditionFailed: 412,
+    PayloadTooLarge: 413,
+    UriTooLong: 414,
+    UnsupportedMediaType: 415,
+    RangeNotSatisfiable: 416,
+    ExpectationFailed: 417,
+    ImATeapot: 418,
+    MisdirectedRequest: 421,
+    UnprocessableEntity: 422,
+    Locked: 423,
+    FailedDependency: 424,
+    TooEarly: 425,
+    UpgradeRequired: 426,
+    PreconditionRequired: 428,
+    TooManyRequests: 429,
+    RequestHeaderFieldsTooLarge: 431,
+    UnavailableForLegalReasons: 451,
+    InternalServerError: 500,
+    NotImplemented: 501,
+    BadGateway: 502,
+    ServiceUnavailable: 503,
+    GatewayTimeout: 504,
+    HttpVersionNotSupported: 505,
+    VariantAlsoNegotiates: 506,
+    InsufficientStorage: 507,
+    LoopDetected: 508,
+    NotExtended: 510,
+    NetworkAuthenticationRequired: 511
+  };
+  Object.entries(HttpStatusCode).forEach(function (_ref) {
+    var _ref2 = _slicedToArray(_ref, 2),
+      key = _ref2[0],
+      value = _ref2[1];
+    HttpStatusCode[value] = key;
+  });
+  var HttpStatusCode$1 = HttpStatusCode;
+
   /**
    * Create an instance of Axios
    *
@@ -2791,10 +2954,14 @@
 
   // Expose isAxiosError
   axios.isAxiosError = isAxiosError;
+
+  // Expose mergeConfig
+  axios.mergeConfig = mergeConfig;
   axios.AxiosHeaders = AxiosHeaders$1;
   axios.formToJSON = function (thing) {
     return formDataToJSON(utils.isHTMLForm(thing) ? new FormData(thing) : thing);
   };
+  axios.HttpStatusCode = HttpStatusCode$1;
   axios["default"] = axios;
 
   return axios;
