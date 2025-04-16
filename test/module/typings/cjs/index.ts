@@ -3,6 +3,7 @@ import axios = require('axios');
 const config: axios.AxiosRequestConfig = {
   url: '/user',
   method: 'get',
+  allowAbsoluteUrls: false,
   baseURL: 'https://api.example.com/',
   transformRequest: (data: any) => '{"foo":"bar"}',
   transformResponse: [

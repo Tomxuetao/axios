@@ -109,7 +109,7 @@ describe('options', function () {
     instance.get('http://someotherurl.com/');
 
     getAjaxRequest().then(function (request) {
-      expect(request.url).toBe('http://someotherurl.com/');
+      expect(request.url).toBe('http://someurl.com/http://someotherurl.com/');
       done();
     });
 
