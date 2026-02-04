@@ -11,4 +11,4 @@ The following versions will receive security updates promptly based on the maint
 
 ## Reporting a Vulnerability
 
-To report a vulnerability, please use the GitHub discolsure in the security tab to alert us to a security issue.
+To report a vulnerability, please use the GitHub disclosure in the security tab to alert us to a security issue.
