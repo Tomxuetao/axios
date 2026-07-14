@@ -3,6 +3,8 @@ type StringLiteralsOrString<Literals extends string> = Literals | (string & {});
 
 export type AxiosHeaderValue = AxiosHeaders | string | string[] | number | boolean | null;
 
+export type AxiosHeaderParameters = Record<string, string>;
+
 export interface RawAxiosHeaders {
   [key: string]: AxiosHeaderValue;
 }
@@ -31,7 +33,9 @@ export class AxiosHeaders {
     rewrite?: boolean | AxiosHeaderMatcher
   ): AxiosHeaders;
   set(headers?: RawAxiosHeaders | AxiosHeaders | string, rewrite?: boolean): AxiosHeaders;
+  set(headers?: Iterable<[string, AxiosHeaderValue]>, rewrite?: boolean): AxiosHeaders;
 
+  get(headerName: string, parser: typeof AxiosHeaders.parseParameters): AxiosHeaderParameters;
   get(headerName: string, parser: RegExp): RegExpExecArray | null;
   get(headerName: string, matcher?: true | AxiosHeaderParser): AxiosHeaderValue;
 
@@ -47,9 +51,13 @@ export class AxiosHeaders {
     ...targets: Array<AxiosHeaders | RawAxiosHeaders | string | undefined | null>
   ): AxiosHeaders;
 
-  toJSON(asStrings?: boolean): RawAxiosHeaders;
+  toJSON(asStrings: true): Record<string, string>;
+  toJSON(asStrings?: false): Record<string, string | string[]>;
+  toJSON(asStrings?: boolean): Record<string, string | string[]>;
 
   static from(thing?: AxiosHeaders | RawAxiosHeaders | string): AxiosHeaders;
+
+  static parseParameters(value: AxiosHeaderValue): AxiosHeaderParameters;
 
   static accessor(header: string | string[]): AxiosHeaders;
 
@@ -88,6 +96,8 @@ export class AxiosHeaders {
   hasAuthorization(matcher?: AxiosHeaderMatcher): boolean;
 
   getSetCookie(): string[];
+
+  toString(): string;
 
   [Symbol.iterator](): IterableIterator<[string, AxiosHeaderValue]>;
 }
@@ -231,6 +241,12 @@ export enum HttpStatusCode {
   LoopDetected = 508,
   NotExtended = 510,
   NetworkAuthenticationRequired = 511,
+  WebServerIsDown = 521,
+  ConnectionTimedOut = 522,
+  OriginIsUnreachable = 523,
+  TimeoutOccurred = 524,
+  SslHandshakeFailed = 525,
+  InvalidSslCertificate = 526,
 }
 
 type UppercaseMethod =
@@ -282,6 +298,7 @@ export interface TransitionalOptions {
   clarifyTimeoutError?: boolean;
   legacyInterceptorReqResOrdering?: boolean;
   advertiseZstdAcceptEncoding?: boolean;
+  validateStatusUndefinedResolves?: boolean;
 }
 
 export interface GenericAbortSignal {
@@ -312,6 +329,8 @@ export interface SerializerOptions {
   dots?: boolean;
   metaTokens?: boolean;
   indexes?: boolean | null;
+  maxDepth?: number;
+  Blob?: { new (...args: any[]): any };
 }
 
 // tslint:disable-next-line
@@ -450,6 +469,7 @@ export interface AxiosRequestConfig<D = any> {
   };
   formDataHeaderPolicy?: 'legacy' | 'content-only';
   redact?: string[];
+  sensitiveHeaders?: string[];
 }
 
 // Alias
@@ -534,7 +554,9 @@ export class AxiosError<T = unknown, D = any> extends Error {
 }
 
 export class CanceledError<T> extends AxiosError<T> {
+  constructor(message?: string, config?: InternalAxiosRequestConfig, request?: any);
   readonly name: 'CanceledError';
+  __CANCEL__?: boolean;
 }
 
 export type AxiosPromise<T = any> = Promise<AxiosResponse<T>>;
@@ -560,6 +582,9 @@ export interface CancelToken {
   promise: Promise<Cancel>;
   reason?: Cancel;
   throwIfRequested(): void;
+  subscribe(listener: (cancel: Cancel | any) => void): void;
+  unsubscribe(listener: (cancel: Cancel | any) => void): void;
+  toAbortSignal(): AbortSignal;
 }
 
 export interface CancelTokenSource {
@@ -712,7 +737,7 @@ export function mergeConfig<D = any>(
 export function create(config?: CreateAxiosDefaults): AxiosInstance;
 
 export interface AxiosStatic extends AxiosInstance {
-  Cancel: CancelStatic;
+  Cancel: typeof CanceledError;
   CancelToken: CancelTokenStatic;
   Axios: typeof Axios;
   AxiosError: typeof AxiosError;

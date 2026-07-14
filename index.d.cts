@@ -50,7 +50,12 @@ declare class AxiosHeaders {
     rewrite?: boolean | AxiosHeaderMatcher
   ): AxiosHeaders;
   set(headers?: axios.RawAxiosHeaders | AxiosHeaders | string, rewrite?: boolean): AxiosHeaders;
+  set(headers?: Iterable<[string, axios.AxiosHeaderValue]>, rewrite?: boolean): AxiosHeaders;
 
+  get(
+    headerName: string,
+    parser: typeof AxiosHeaders.parseParameters
+  ): axios.AxiosHeaderParameters;
   get(headerName: string, parser: RegExp): RegExpExecArray | null;
   get(headerName: string, matcher?: true | AxiosHeaderParser): axios.AxiosHeaderValue;
 
@@ -66,9 +71,13 @@ declare class AxiosHeaders {
     ...targets: Array<AxiosHeaders | axios.RawAxiosHeaders | string | undefined | null>
   ): AxiosHeaders;
 
-  toJSON(asStrings?: boolean): axios.RawAxiosHeaders;
+  toJSON(asStrings: true): Record<string, string>;
+  toJSON(asStrings?: false): Record<string, string | string[]>;
+  toJSON(asStrings?: boolean): Record<string, string | string[]>;
 
   static from(thing?: AxiosHeaders | axios.RawAxiosHeaders | string): AxiosHeaders;
+
+  static parseParameters(value: axios.AxiosHeaderValue): axios.AxiosHeaderParameters;
 
   static accessor(header: string | string[]): AxiosHeaders;
 
@@ -117,6 +126,8 @@ declare class AxiosHeaders {
 
   getSetCookie(): string[];
 
+  toString(): string;
+
   [Symbol.iterator](): IterableIterator<[string, axios.AxiosHeaderValue]>;
 }
 
@@ -162,7 +173,11 @@ declare class AxiosError<T = unknown, D = any> extends Error {
   static readonly ETIMEDOUT = 'ETIMEDOUT';
 }
 
-declare class CanceledError<T> extends AxiosError<T> {}
+declare class CanceledError<T> extends AxiosError<T> {
+  constructor(message?: string, config?: axios.InternalAxiosRequestConfig, request?: any);
+  readonly name: 'CanceledError';
+  __CANCEL__?: boolean;
+}
 
 declare class Axios {
   constructor(config?: axios.AxiosRequestConfig);
@@ -292,11 +307,19 @@ declare enum HttpStatusCode {
   LoopDetected = 508,
   NotExtended = 510,
   NetworkAuthenticationRequired = 511,
+  WebServerIsDown = 521,
+  ConnectionTimedOut = 522,
+  OriginIsUnreachable = 523,
+  TimeoutOccurred = 524,
+  SslHandshakeFailed = 525,
+  InvalidSslCertificate = 526,
 }
 
 type InternalAxiosError<T = unknown, D = any> = AxiosError<T, D>;
 
 declare namespace axios {
+  type AxiosHeaderParameters = Record<string, string>;
+
   type AxiosError<T = unknown, D = any> = InternalAxiosError<T, D>;
 
   interface RawAxiosHeaders {
@@ -393,6 +416,7 @@ declare namespace axios {
     clarifyTimeoutError?: boolean;
     legacyInterceptorReqResOrdering?: boolean;
     advertiseZstdAcceptEncoding?: boolean;
+    validateStatusUndefinedResolves?: boolean;
   }
 
   interface GenericAbortSignal {
@@ -423,6 +447,8 @@ declare namespace axios {
     dots?: boolean;
     metaTokens?: boolean;
     indexes?: boolean | null;
+    maxDepth?: number;
+    Blob?: { new (...args: any[]): any };
   }
 
   // tslint:disable-next-line
@@ -555,6 +581,7 @@ declare namespace axios {
     };
     formDataHeaderPolicy?: 'legacy' | 'content-only';
     redact?: string[];
+    sensitiveHeaders?: string[];
   }
 
   // Alias
@@ -619,6 +646,9 @@ declare namespace axios {
     promise: Promise<Cancel>;
     reason?: Cancel;
     throwIfRequested(): void;
+    subscribe(listener: (cancel: Cancel | any) => void): void;
+    unsubscribe(listener: (cancel: Cancel | any) => void): void;
+    toAbortSignal(): AbortSignal;
   }
 
   interface CancelTokenSource {
@@ -685,14 +715,14 @@ declare namespace axios {
   }
 
   interface AxiosStatic extends AxiosInstance {
-    Cancel: CancelStatic;
+    Cancel: typeof CanceledError;
     CancelToken: CancelTokenStatic;
     Axios: typeof Axios;
     AxiosError: typeof AxiosError;
     CanceledError: typeof CanceledError;
     HttpStatusCode: typeof HttpStatusCode;
     readonly VERSION: string;
-    isCancel(value: any): value is Cancel;
+    isCancel<T = any>(value: any): value is CanceledError<T>;
     all<T>(values: Array<T | Promise<T>>): Promise<T[]>;
     spread<T, R>(callback: (...args: T[]) => R): (array: T[]) => R;
     isAxiosError<T = any, D = any>(payload: any): payload is AxiosError<T, D>;
